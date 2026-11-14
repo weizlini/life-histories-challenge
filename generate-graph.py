@@ -51,24 +51,34 @@ for i in range(25):
 
     target_start = float(r_starts[i])
 
-    # If the randomly assigned start value is high, model a "pre-crash" state at t=0
+    # If the randomly assigned start value is high, model a staggered "delayed crash"
     if target_start > 250:
         base_pop = float(np.random.randint(10, 150))
-        pop = np.full_like(t, base_pop, dtype=float)
 
-        # Center a spike at t=0 so the actual starting point matches target_start, then crashes
-        spike_height = target_start - base_pop
-        width = np.random.uniform(2, 8)
-        pop += spike_height * np.exp(-((t - 0) ** 2) / width)
+        # Create a logistic decline so they crash at completely random times (generations 5 to 25)
+        crash_midpoint = np.random.uniform(5, 25)
+        crash_rate = np.random.uniform(0.2, 0.5)
+
+        # Mathematically scale the curve so it perfectly hits `target_start` at t=0
+        height = (target_start - base_pop) * (1 + np.exp(-crash_rate * crash_midpoint))
+        pop = base_pop + height / (1 + np.exp(crash_rate * (t - crash_midpoint)))
+
     else:
         # Standard low starting baseline
         base_pop = target_start
         pop = np.full_like(t, base_pop, dtype=float)
 
-    # 1 to 4 massive exponential reproduction events in the future
-    num_spikes = np.random.randint(1, 5)
+        # 50% chance for low-starters to have a violent early "boom" shortly after introduction
+        if random.random() > 0.5:
+            early_spike = np.random.uniform(5, 15)
+            early_height = np.random.randint(400, 900)
+            early_width = np.random.uniform(2, 6)
+            pop += early_height * np.exp(-((t - early_spike) ** 2) / early_width)
+
+    # 1 to 4 massive exponential reproduction events later in the simulation (post-introduction phase)
+    num_spikes = np.random.randint(1, 4)
     for _ in range(num_spikes):
-        spike_time = np.random.randint(10, 90)
+        spike_time = np.random.randint(30, 95)
         spike_height = np.random.randint(400, 900)
         width = np.random.uniform(2, 8)  # narrowness of the spike
         pop += spike_height * np.exp(-((t - spike_time) ** 2) / width)
@@ -122,7 +132,8 @@ ax.set_xlim(-35, 105)
 ax.set_ylim(0, 1100)
 ax.set_xlabel("Time (Generations)", fontsize=14, fontweight='bold', labelpad=10)
 ax.set_ylabel("Population Size", fontsize=14, fontweight='bold', labelpad=10)
-ax.set_title("Population Dynamics of 35 Arctic Species", fontsize=16, fontweight='bold', pad=20)
+ax.set_title("Population Dynamics of 35 Canadian Arctic Nature Reserve Introduced species", fontsize=16,
+             fontweight='bold', pad=20)
 
 ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
