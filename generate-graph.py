@@ -20,6 +20,18 @@ all_target_starts = random.sample(range(20, 950), 35)
 k_starts = all_target_starts[:10]
 r_starts = all_target_starts[10:]
 
+
+def inject_missing_data(pop_array, time_array):
+    """Simulates missed ecological surveys by injecting np.nan gaps."""
+    num_gaps = np.random.randint(2, 6)
+    for _ in range(num_gaps):
+        gap_start = np.random.uniform(5, 95)
+        gap_len = np.random.uniform(0.5, 2.5)  # Gap of 0.5 to 2.5 years
+        gap_mask = (time_array >= gap_start) & (time_array <= gap_start + gap_len)
+        pop_array[gap_mask] = np.nan
+    return pop_array
+
+
 # ==========================================
 # POPULATION MATH (35 Species)
 # ==========================================
@@ -37,28 +49,28 @@ for i in range(10):
     # 1. Base logistic curve
     pop = start_pop + (end_pop - start_pop) / (1 + np.exp(-rate * (t - midpoint)))
 
-    # 2. Add severe crashes to roughly half the K-selected species
+    # 2. Add VERTICAL crashes to roughly half the K-selected species to trick derivative filters
     if random.random() > 0.5:
         crash_time = np.random.uniform(20, 80)
-        # Calculate the population exactly at the crash time to drop it proportionally
         crash_idx = int((crash_time / 110.0) * 3000)
         if crash_idx < 3000:
             current_level = pop[crash_idx]
             crash_depth = np.random.uniform(0.4, 0.7) * current_level
-            crash_steepness = np.random.uniform(0.5, 2.0)
+            # HARDENING: Massive steepness ensures the drop is nearly vertical (dy/dx > 5.0)
+            crash_steepness = np.random.uniform(5.0, 15.0)
 
-            # Apply the crash
             pop -= crash_depth / (1 + np.exp(-crash_steepness * (t - crash_time)))
 
-            # Apply a slow, agonizing recovery or stabilization to a new baseline
             recovery_rate = np.random.uniform(0.02, 0.08)
             pop += (crash_depth * np.random.uniform(0.3, 0.8)) / (1 + np.exp(-recovery_rate * (t - (crash_time + 15))))
 
-    # 3. Add complex, erratic wobble to break up the "nice slow curves"
-    pop += np.random.randint(10, 30) * np.sin(t * np.random.uniform(0.05, 0.3))  # Low freq wobble
-    pop += np.random.randint(2, 10) * np.cos(t * np.random.uniform(0.8, 2.0))  # High freq jitter
+    # 3. Add SHATTER Jitter: high frequency/amplitude seasonal wobble.
+    # Mathematically creates a local slope > 3.5 continuously, shattering the line in a slope filter.
+    pop += np.random.uniform(15, 35) * np.sin(t * np.random.uniform(3.0, 6.0))
+    pop += np.random.randint(2, 10) * np.cos(t * np.random.uniform(0.8, 2.0))
 
-    pop = np.clip(pop, 5, None)  # Prevent dropping below 0
+    pop = np.clip(pop, 5, None)
+    pop = inject_missing_data(pop, t)
     lines.append(pop)
 
 for i in range(25):
@@ -79,14 +91,13 @@ for i in range(25):
         spike_start = 30
     else:
         if random.random() > 0.5:
-            # NEW: The "Lag Phase" Trap (Fake K-selected)
-            # Slowly rise like a K-selected species for 40-60 years before going nuclear
+            # The "Lag Phase" Trap (Fake K-selected)
             fake_k_end = np.random.uniform(target_start + 50, target_start + 300)
             fake_mid = np.random.uniform(20, 50)
             fake_rate = np.random.uniform(0.05, 0.15)
 
             pop = target_start + (fake_k_end - target_start) / (1 + np.exp(-fake_rate * (t - fake_mid)))
-            spike_start = np.random.uniform(55, 75)  # Wait a long time to boom/bust
+            spike_start = np.random.uniform(55, 75)
         else:
             # Standard low starting baseline with an early boom
             base_pop = target_start
@@ -98,18 +109,24 @@ for i in range(25):
             pop += early_height * np.exp(-((t - early_spike) ** 2) / early_width)
             spike_start = 30
 
-    # Organic drift so baselines aren't flat
     pop += np.random.uniform(2, 8) * np.sin(t * np.random.uniform(0.01, 0.1))
 
-    # Add the exponential spikes AFTER their respective safe windows
+    # Add the exponential spikes
     num_spikes = np.random.randint(2, 6)
     for _ in range(num_spikes):
         spike_time = np.random.uniform(spike_start, 110)
         spike_height = np.random.randint(400, 900)
-        width = np.random.uniform(2, 8)
+
+        # HARDENING: 30% chance for a "Wide Hill" boom that stays below AI's slope threshold
+        if random.random() > 0.7:
+            width = np.random.uniform(30, 80)
+        else:
+            width = np.random.uniform(2, 8)
+
         pop += spike_height * np.exp(-((t - spike_time) ** 2) / width)
 
     pop = np.clip(pop, 5, None)
+    pop = inject_missing_data(pop, t)
     lines.append(pop)
 
 combined = list(zip(labels, lines))
@@ -117,7 +134,8 @@ random.shuffle(combined)
 labels, lines = zip(*combined)
 
 # Find the absolute highest point across all species to dynamically set the Y-axis limit
-max_pop_value = max([np.max(pop) for pop in lines])
+# We use np.nanmax because the arrays now contain NaNs
+max_pop_value = max([np.nanmax(pop) for pop in lines])
 y_limit = max(1100.0, max_pop_value * 1.05)
 
 # ==========================================
@@ -137,9 +155,13 @@ for pop in lines:
     plot_mask = t <= 100
     ax.plot(t[plot_mask], pop[plot_mask], color='black', linewidth=1.0, solid_joinstyle='round', alpha=0.8)
 
-start_vals = [pop[0] for pop in lines]
-sorted_indices = np.argsort(start_vals)
+# Get valid starting values (t=0) despite random initial nan gaps
+start_vals = []
+for pop in lines:
+    first_valid_idx = np.where(~np.isnan(pop))[0][0]
+    start_vals.append(pop[first_valid_idx])
 
+sorted_indices = np.argsort(start_vals)
 text_y_positions = np.linspace(10, y_limit * 0.98, len(lines))
 
 for rank, idx in enumerate(sorted_indices):
@@ -178,9 +200,10 @@ for i, pop in enumerate(lines):
     label = labels[i]
     if ground_truth["classifications"][label] == "K-selected":
         plot_mask = t <= 100
-        visible_indices = np.where(plot_mask)[0]
-        dot_idx = random.choice(visible_indices[500:-500])
-        ax.plot(t[dot_idx], pop[dot_idx], 'ro', markersize=6, zorder=5)
+        visible_indices = np.where(plot_mask & ~np.isnan(pop))[0]
+        if len(visible_indices) > 0:
+            dot_idx = random.choice(visible_indices[500:-500])
+            ax.plot(t[dot_idx], pop[dot_idx], 'ro', markersize=6, zorder=5)
 
 plt.savefig("population_dynamics_annotated.png", dpi=300, bbox_inches='tight')
 print("Saved annotated visual to population_dynamics_annotated.png")
