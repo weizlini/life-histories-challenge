@@ -99,7 +99,7 @@ with open("ground_truth.json", "w") as f:
 print("Saved ground truth to ground_truth.json")
 
 # ==========================================
-# PLOTTING THE GRAPH
+# PLOTTING THE CLEAN GRAPH
 # ==========================================
 
 fig, ax = plt.subplots(figsize=(14, 10))
@@ -145,6 +145,29 @@ ax.spines['bottom'].set_linewidth(2)
 ax.grid(False)
 
 plt.tight_layout()
+
+# Save the clean version first
 plt.savefig("population_dynamics.png", dpi=300, bbox_inches='tight')
+print("Saved clean visual to population_dynamics.png")
+
+# ==========================================
+# PLOTTING THE ANNOTATED GRAPH
+# ==========================================
+
+# Add a red dot if the species is K-selected
+for i, pop in enumerate(lines):
+    label = labels[i]
+    if ground_truth["classifications"][label] == "K-selected":
+        plot_mask = t <= 100
+        visible_indices = np.where(plot_mask)[0]
+        # Pick a random point along the visible line to place the red dot
+        dot_idx = random.choice(visible_indices[500:-500])
+        ax.plot(t[dot_idx], pop[dot_idx], 'ro', markersize=6, zorder=5)
+
+# Save the annotated version over the same axis
+plt.savefig("population_dynamics_annotated.png", dpi=300, bbox_inches='tight')
+print("Saved annotated visual to population_dynamics_annotated.png")
+
+# Terminate script
 print("Visual generation complete. Exiting.")
 sys.exit(0)
