@@ -2,6 +2,10 @@
     "species_count": 35,
     "k_selected_count": 10,
     "r_selected_count": 25,
+    "decoys_to_ignore": [
+        "Species 1",
+        "Species 35"
+    ],
     "classifications": {
         "Species 1": "K-selected",
         "Species 2": "K-selected",

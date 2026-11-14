@@ -14,22 +14,40 @@ random.seed(42)
 
 lines = []
 labels = []
-ground_truth = {"species_count": 35, "k_selected_count": 10, "r_selected_count": 25, "classifications": {}}
+ground_truth = {
+    "species_count": 35,
+    "k_selected_count": 10,
+    "r_selected_count": 25,
+    "decoys_to_ignore": [],
+    "classifications": {}
+}
 
 # Guarantee unique, completely mixed starting values for all 35 species
 all_target_starts = random.sample(range(20, 950), 35)
 k_starts = all_target_starts[:10]
 r_starts = all_target_starts[10:]
 
+# Pick exactly one K-selected and one r-selected to be the >20% gap decoys
+decoy_k_idx = random.randint(0, 9)
+decoy_r_idx = random.randint(0, 24)
 
-def inject_missing_data(pop_array, time_array):
+
+def inject_missing_data(pop_array, time_array, is_decoy=False):
     """Simulates missed ecological surveys by injecting np.nan gaps."""
-    num_gaps = np.random.randint(2, 6)
-    for _ in range(num_gaps):
-        gap_start = np.random.uniform(5, 95)
-        gap_len = np.random.uniform(0.5, 2.5)  # Gap of 0.5 to 2.5 years
-        gap_mask = (time_array >= gap_start) & (time_array <= gap_start + gap_len)
-        pop_array[gap_mask] = np.nan
+    if is_decoy:
+        # Force exactly 27.5% missing data via 5 perfectly spaced 5.5-year gaps
+        gap_starts = [10, 28, 46, 64, 82]
+        for st in gap_starts:
+            gap_mask = (time_array >= st) & (time_array <= st + 5.5)
+            pop_array[gap_mask] = np.nan
+    else:
+        # Normal lines get 2-4 small gaps (max ~7% missing data)
+        num_gaps = np.random.randint(2, 5)
+        for _ in range(num_gaps):
+            gap_start = np.random.uniform(5, 95)
+            gap_len = np.random.uniform(0.5, 2.0)
+            gap_mask = (time_array >= gap_start) & (time_array <= gap_start + gap_len)
+            pop_array[gap_mask] = np.nan
     return pop_array
 
 
@@ -42,15 +60,19 @@ for i in range(10):
     labels.append(name)
     ground_truth["classifications"][name] = "K-selected"
 
+    is_decoy = (i == decoy_k_idx)
+    if is_decoy:
+        ground_truth["decoys_to_ignore"].append(name)
+
     start_pop = k_starts[i]
     end_pop = np.random.randint(100, 900)
     midpoint = np.random.randint(20, 80)
     rate = np.random.uniform(0.05, 0.2)
 
-    # 1. Base logistic curve
+    # Base logistic curve
     pop = start_pop + (end_pop - start_pop) / (1 + np.exp(-rate * (t - midpoint)))
 
-    # 2. Add VERTICAL crashes to roughly half the K-selected species
+    # VERTICAL crashes
     if random.random() > 0.5:
         crash_time = np.random.uniform(20, 80)
         crash_idx = int((crash_time / 110.0) * 3000)
@@ -64,20 +86,24 @@ for i in range(10):
             recovery_rate = np.random.uniform(0.02, 0.08)
             pop += (crash_depth * np.random.uniform(0.3, 0.8)) / (1 + np.exp(-recovery_rate * (t - (crash_time + 15))))
 
-    # 3. Add SHATTER Jitter: high frequency seasonal wobble.
+    # SHATTER Jitter
     pop += np.random.uniform(15, 35) * np.sin(t * np.random.uniform(3.0, 6.0))
     pop += np.random.randint(2, 10) * np.cos(t * np.random.uniform(0.8, 2.0))
 
     pop = np.clip(pop, 5, None)
 
     pop_full = pop.copy()
-    pop_gaps = inject_missing_data(pop.copy(), t)
+    pop_gaps = inject_missing_data(pop.copy(), t, is_decoy)
     lines.append((pop_gaps, pop_full))
 
 for i in range(25):
     name = f"Species {i + 11}"
     labels.append(name)
     ground_truth["classifications"][name] = "r-selected"
+
+    is_decoy = (i == decoy_r_idx)
+    if is_decoy:
+        ground_truth["decoys_to_ignore"].append(name)
 
     target_start = float(r_starts[i])
 
@@ -129,7 +155,7 @@ for i in range(25):
     pop = np.clip(pop, 5, None)
 
     pop_full = pop.copy()
-    pop_gaps = inject_missing_data(pop.copy(), t)
+    pop_gaps = inject_missing_data(pop.copy(), t, is_decoy)
     lines.append((pop_gaps, pop_full))
 
 combined = list(zip(labels, lines))
@@ -157,7 +183,7 @@ for pop_gaps, pop_full in lines:
     plot_mask = t <= 100
     # Plot the inferred underlying curve (dotted) everywhere
     ax.plot(t[plot_mask], pop_full[plot_mask], color='black', linewidth=1.0, linestyle=':', alpha=0.6)
-    # Plot the solid observed data on top (this masks the dotted line where data exists)
+    # Plot the solid observed data on top
     ax.plot(t[plot_mask], pop_gaps[plot_mask], color='black', linewidth=1.0, solid_joinstyle='round', alpha=0.8)
 
 # Get valid starting values (t=0) despite random initial nan gaps
@@ -179,10 +205,14 @@ for rank, idx in enumerate(sorted_indices):
             fontsize=8, fontweight='bold', fontfamily='sans-serif')
     ax.plot([text_x + 1, 0], [text_y, actual_y], color='black', linewidth=0.5, alpha=0.6)
 
-# Add Legend for the missing data
+# Add Legend and Decoy Trap Warning
 no_data_line = mlines.Line2D([], [], color='black', linewidth=1.0, linestyle=':', alpha=0.8,
                              label='No Survey Data (Inferred)')
-ax.legend(handles=[no_data_line], loc='upper right', fontsize=10, frameon=False)
+legend = ax.legend(handles=[no_data_line], loc='upper right', fontsize=10, frameon=False)
+
+ax.text(0.99, 0.94, "* Note: Lines with >20% gaps are not reliable for determining species life history",
+        transform=ax.transAxes, ha='right', va='top', fontsize=11,
+        color='red', fontstyle='italic', bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=3))
 
 ax.set_xlim(-35, 100)
 ax.set_ylim(0, y_limit)
