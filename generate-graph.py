@@ -131,8 +131,6 @@ ax.spines['bottom'].set_linewidth(2)
 ax.grid(False)
 
 plt.tight_layout()
-plt.show()
-
-# Terminate script
+plt.savefig("population_dynamics.png", dpi=300, bbox_inches='tight')
 print("Visual generation complete. Exiting.")
 sys.exit(0)
