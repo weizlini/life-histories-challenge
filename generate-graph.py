@@ -55,7 +55,7 @@ for i in range(25):
     if target_start > 250:
         base_pop = float(np.random.randint(10, 150))
 
-        # Create a logistic decline so they crash at completely random times (generations 5 to 25)
+        # Create a logistic decline so they crash at completely random times (Years 5 to 25)
         crash_midpoint = np.random.uniform(5, 25)
         crash_rate = np.random.uniform(0.2, 0.5)
 
@@ -130,7 +130,7 @@ for rank, idx in enumerate(sorted_indices):
 # Expand the left margin to -35 to give plenty of room for labels and leader lines
 ax.set_xlim(-35, 105)
 ax.set_ylim(0, 1100)
-ax.set_xlabel("Time (Generations)", fontsize=14, fontweight='bold', labelpad=10)
+ax.set_xlabel("Time (Years)", fontsize=14, fontweight='bold', labelpad=10)
 ax.set_ylabel("Population Size", fontsize=14, fontweight='bold', labelpad=10)
 ax.set_title("Population Dynamics of 35 Canadian Arctic Nature Reserve Introduced species", fontsize=16,
              fontweight='bold', pad=20)
