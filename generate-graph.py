@@ -210,7 +210,7 @@ no_data_line = mlines.Line2D([], [], color='black', linewidth=1.0, linestyle=':'
                              label='No Survey Data (Inferred)')
 legend = ax.legend(handles=[no_data_line], loc='upper right', fontsize=10, frameon=False)
 
-ax.text(0.99, 0.94, "* Note: Lines with >20% gaps are not reliable for determining species life history",
+ax.text(0.99, 0.94, "* Note: Lines with >20% gaps are not valid for determining species life history",
         transform=ax.transAxes, ha='right', va='top', fontsize=11,
         color='red', fontstyle='italic', bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=3))
 
