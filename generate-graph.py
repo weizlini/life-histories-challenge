@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import json
 import random
+import string
 import sys
 
 # Generate high-resolution time data
@@ -23,6 +24,14 @@ ground_truth = {
     "decoys_to_ignore": [],
     "classifications": {}
 }
+
+# Generate 35 unique random alphanumeric codes (e.g., "XK-42")
+unique_codes = set()
+while len(unique_codes) < 35:
+    code = "".join(random.choices(string.ascii_uppercase, k=2)) + "-" + "".join(random.choices(string.digits, k=2))
+    unique_codes.add(code)
+unique_codes = list(unique_codes)
+random.shuffle(unique_codes)
 
 # Guarantee unique, completely mixed starting values for all 35 species
 all_target_starts = random.sample(range(20, 950), 35)
@@ -53,12 +62,27 @@ def inject_missing_data(pop_array, time_array, is_decoy=False):
     return pop_array
 
 
+def add_shatter_jitter(pop_array, time_array):
+    """Applies high-frequency seasonal wobble with a dynamic, time-varying amplitude envelope."""
+    # Dynamic envelope: varies smoothly between ~0.0 and 1.0 over the decades
+    envelope = 0.5 + 0.3 * np.sin(time_array * np.random.uniform(0.02, 0.08)) + 0.2 * np.cos(
+        time_array * np.random.uniform(0.01, 0.05))
+
+    # Base wobble frequencies
+    wobble1 = np.random.uniform(15, 35) * np.sin(time_array * np.random.uniform(3.0, 6.0))
+    wobble2 = np.random.randint(2, 10) * np.cos(time_array * np.random.uniform(0.8, 2.0))
+
+    # Apply the envelope to the wobbles
+    pop_array += (wobble1 + wobble2) * envelope
+    return pop_array
+
+
 # ==========================================
 # POPULATION MATH (35 Species)
 # ==========================================
 
 for i in range(10):
-    name = f"Species {i + 1}"
+    name = f"Species {unique_codes[i]}"
     labels.append(name)
     ground_truth["classifications"][name] = "K-selected"
 
@@ -88,9 +112,9 @@ for i in range(10):
             recovery_rate = np.random.uniform(0.02, 0.08)
             pop += (crash_depth * np.random.uniform(0.3, 0.8)) / (1 + np.exp(-recovery_rate * (t - (crash_time + 15))))
 
-    # SHATTER Jitter
-    pop += np.random.uniform(15, 35) * np.sin(t * np.random.uniform(3.0, 6.0))
-    pop += np.random.randint(2, 10) * np.cos(t * np.random.uniform(0.8, 2.0))
+    # HETEROGENEOUS SHATTER Jitter: Only apply to 50% of K-selected
+    if random.random() > 0.5:
+        pop = add_shatter_jitter(pop, t)
 
     pop = np.clip(pop, 5, None)
 
@@ -99,7 +123,7 @@ for i in range(10):
     lines.append((pop_gaps, pop_full))
 
 for i in range(25):
-    name = f"Species {i + 11}"
+    name = f"Species {unique_codes[i + 10]}"
     labels.append(name)
     ground_truth["classifications"][name] = "r-selected"
 
@@ -138,7 +162,9 @@ for i in range(25):
             pop += early_height * np.exp(-((t - early_spike) ** 2) / early_width)
             spike_start = 30
 
-    pop += np.random.uniform(2, 8) * np.sin(t * np.random.uniform(0.01, 0.1))
+    # HETEROGENEOUS SHATTER Jitter: Only apply to 50% of r-selected
+    if random.random() > 0.5:
+        pop = add_shatter_jitter(pop, t)
 
     # Add the exponential spikes
     num_spikes = np.random.randint(2, 6)
@@ -212,7 +238,7 @@ no_data_line = mlines.Line2D([], [], color='black', linewidth=1.0, linestyle=':'
                              label='No Survey Data (Inferred)')
 legend = ax.legend(handles=[no_data_line], loc='upper right', fontsize=10, frameon=False)
 
-ax.text(0.99, 0.94, "* Note: Lines with >20% gaps are not valid for determining species life history",
+ax.text(0.99, 0.94, "* Note: Lines with >20% gaps are not reliable for determining species life history",
         transform=ax.transAxes, ha='right', va='top', fontsize=11,
         color='red', fontstyle='italic', bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=3))
 
