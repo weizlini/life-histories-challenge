@@ -5,7 +5,7 @@ import random
 import sys
 
 # Generate high-resolution time data
-t = np.linspace(0, 100, 3000)
+t = np.linspace(0, 110, 3000) # Extended slightly to calculate overlapping right-edge spikes smoothly
 
 # Seed for reproducibility so the graph and JSON match every time
 np.random.seed(42)
@@ -75,10 +75,11 @@ for i in range(25):
             early_width = np.random.uniform(2, 6)
             pop += early_height * np.exp(-((t - early_spike) ** 2) / early_width)
 
-    # 1 to 4 massive exponential reproduction events later in the simulation (post-introduction phase)
-    num_spikes = np.random.randint(1, 4)
+    # 1 to 5 massive exponential reproduction events later in the simulation (post-introduction phase)
+    num_spikes = np.random.randint(2, 6)
     for _ in range(num_spikes):
-        spike_time = np.random.randint(30, 95)
+        # Push the spike time all the way up to 110 so they are actively oscillating at the graph's right edge
+        spike_time = np.random.randint(30, 110)
         spike_height = np.random.randint(400, 900)
         width = np.random.uniform(2, 8)  # narrowness of the spike
         pop += spike_height * np.exp(-((t - spike_time) ** 2) / width)
@@ -104,7 +105,9 @@ print("Saved ground truth to ground_truth.json")
 fig, ax = plt.subplots(figsize=(14, 10))
 
 for pop in lines:
-    ax.plot(t, pop, color='black', linewidth=1.0, solid_joinstyle='round', alpha=0.8)
+    # We slice t and pop to only plot up to year 100, leaving the rest cut off naturally
+    plot_mask = t <= 100
+    ax.plot(t[plot_mask], pop[plot_mask], color='black', linewidth=1.0, solid_joinstyle='round', alpha=0.8)
 
 # Calculate start values to organize labels without overlapping lines
 start_vals = [pop[0] for pop in lines]
@@ -128,7 +131,7 @@ for rank, idx in enumerate(sorted_indices):
     ax.plot([text_x + 1, 0], [text_y, actual_y], color='black', linewidth=0.5, alpha=0.6)
 
 # Expand the left margin to -35 to give plenty of room for labels and leader lines
-ax.set_xlim(-35, 105)
+ax.set_xlim(-35, 100) # Hard stop at year 100 visually
 ax.set_ylim(0, 1100)
 ax.set_xlabel("Time (Years)", fontsize=14, fontweight='bold', labelpad=10)
 ax.set_ylabel("Population Size", fontsize=14, fontweight='bold', labelpad=10)
