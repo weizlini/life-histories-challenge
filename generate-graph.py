@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import json
 import random
 import sys
@@ -49,14 +50,13 @@ for i in range(10):
     # 1. Base logistic curve
     pop = start_pop + (end_pop - start_pop) / (1 + np.exp(-rate * (t - midpoint)))
 
-    # 2. Add VERTICAL crashes to roughly half the K-selected species to trick derivative filters
+    # 2. Add VERTICAL crashes to roughly half the K-selected species
     if random.random() > 0.5:
         crash_time = np.random.uniform(20, 80)
         crash_idx = int((crash_time / 110.0) * 3000)
         if crash_idx < 3000:
             current_level = pop[crash_idx]
             crash_depth = np.random.uniform(0.4, 0.7) * current_level
-            # HARDENING: Massive steepness ensures the drop is nearly vertical (dy/dx > 5.0)
             crash_steepness = np.random.uniform(5.0, 15.0)
 
             pop -= crash_depth / (1 + np.exp(-crash_steepness * (t - crash_time)))
@@ -64,14 +64,15 @@ for i in range(10):
             recovery_rate = np.random.uniform(0.02, 0.08)
             pop += (crash_depth * np.random.uniform(0.3, 0.8)) / (1 + np.exp(-recovery_rate * (t - (crash_time + 15))))
 
-    # 3. Add SHATTER Jitter: high frequency/amplitude seasonal wobble.
-    # Mathematically creates a local slope > 3.5 continuously, shattering the line in a slope filter.
+    # 3. Add SHATTER Jitter: high frequency seasonal wobble.
     pop += np.random.uniform(15, 35) * np.sin(t * np.random.uniform(3.0, 6.0))
     pop += np.random.randint(2, 10) * np.cos(t * np.random.uniform(0.8, 2.0))
 
     pop = np.clip(pop, 5, None)
-    pop = inject_missing_data(pop, t)
-    lines.append(pop)
+
+    pop_full = pop.copy()
+    pop_gaps = inject_missing_data(pop.copy(), t)
+    lines.append((pop_gaps, pop_full))
 
 for i in range(25):
     name = f"Species {i + 11}"
@@ -117,7 +118,7 @@ for i in range(25):
         spike_time = np.random.uniform(spike_start, 110)
         spike_height = np.random.randint(400, 900)
 
-        # HARDENING: 30% chance for a "Wide Hill" boom that stays below AI's slope threshold
+        # Wide Hill boom Trap
         if random.random() > 0.7:
             width = np.random.uniform(30, 80)
         else:
@@ -126,16 +127,17 @@ for i in range(25):
         pop += spike_height * np.exp(-((t - spike_time) ** 2) / width)
 
     pop = np.clip(pop, 5, None)
-    pop = inject_missing_data(pop, t)
-    lines.append(pop)
+
+    pop_full = pop.copy()
+    pop_gaps = inject_missing_data(pop.copy(), t)
+    lines.append((pop_gaps, pop_full))
 
 combined = list(zip(labels, lines))
 random.shuffle(combined)
 labels, lines = zip(*combined)
 
 # Find the absolute highest point across all species to dynamically set the Y-axis limit
-# We use np.nanmax because the arrays now contain NaNs
-max_pop_value = max([np.nanmax(pop) for pop in lines])
+max_pop_value = max([np.nanmax(pop_gaps) for pop_gaps, pop_full in lines])
 y_limit = max(1100.0, max_pop_value * 1.05)
 
 # ==========================================
@@ -151,15 +153,18 @@ print("Saved ground truth to ground_truth.json")
 
 fig, ax = plt.subplots(figsize=(14, 10))
 
-for pop in lines:
+for pop_gaps, pop_full in lines:
     plot_mask = t <= 100
-    ax.plot(t[plot_mask], pop[plot_mask], color='black', linewidth=1.0, solid_joinstyle='round', alpha=0.8)
+    # Plot the inferred underlying curve (dotted) everywhere
+    ax.plot(t[plot_mask], pop_full[plot_mask], color='black', linewidth=1.0, linestyle=':', alpha=0.6)
+    # Plot the solid observed data on top (this masks the dotted line where data exists)
+    ax.plot(t[plot_mask], pop_gaps[plot_mask], color='black', linewidth=1.0, solid_joinstyle='round', alpha=0.8)
 
 # Get valid starting values (t=0) despite random initial nan gaps
 start_vals = []
-for pop in lines:
-    first_valid_idx = np.where(~np.isnan(pop))[0][0]
-    start_vals.append(pop[first_valid_idx])
+for pop_gaps, pop_full in lines:
+    first_valid_idx = np.where(~np.isnan(pop_gaps))[0][0]
+    start_vals.append(pop_gaps[first_valid_idx])
 
 sorted_indices = np.argsort(start_vals)
 text_y_positions = np.linspace(10, y_limit * 0.98, len(lines))
@@ -173,6 +178,11 @@ for rank, idx in enumerate(sorted_indices):
     ax.text(text_x, text_y, label, va='center', ha='right',
             fontsize=8, fontweight='bold', fontfamily='sans-serif')
     ax.plot([text_x + 1, 0], [text_y, actual_y], color='black', linewidth=0.5, alpha=0.6)
+
+# Add Legend for the missing data
+no_data_line = mlines.Line2D([], [], color='black', linewidth=1.0, linestyle=':', alpha=0.8,
+                             label='No Survey Data (Inferred)')
+ax.legend(handles=[no_data_line], loc='upper right', fontsize=10, frameon=False)
 
 ax.set_xlim(-35, 100)
 ax.set_ylim(0, y_limit)
@@ -196,14 +206,14 @@ print("Saved clean visual to population_dynamics.png")
 # PLOTTING THE ANNOTATED GRAPH
 # ==========================================
 
-for i, pop in enumerate(lines):
+for i, (pop_gaps, pop_full) in enumerate(lines):
     label = labels[i]
     if ground_truth["classifications"][label] == "K-selected":
         plot_mask = t <= 100
-        visible_indices = np.where(plot_mask & ~np.isnan(pop))[0]
+        visible_indices = np.where(plot_mask & ~np.isnan(pop_gaps))[0]
         if len(visible_indices) > 0:
             dot_idx = random.choice(visible_indices[500:-500])
-            ax.plot(t[dot_idx], pop[dot_idx], 'ro', markersize=6, zorder=5)
+            ax.plot(t[dot_idx], pop_gaps[dot_idx], 'ro', markersize=6, zorder=5)
 
 plt.savefig("population_dynamics_annotated.png", dpi=300, bbox_inches='tight')
 print("Saved annotated visual to population_dynamics_annotated.png")
