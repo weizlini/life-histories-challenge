@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 import random
+import sys
 
 # Generate high-resolution time data
 t = np.linspace(0, 100, 3000)
@@ -14,9 +15,11 @@ lines = []
 labels = []
 ground_truth = {"species_count": 35, "k_selected_count": 10, "r_selected_count": 25, "classifications": {}}
 
-# Guarantee unique starting values for all 35 species
-k_starts = random.sample(range(300, 950), 10)
-r_starts = random.sample(range(10, 250), 25)
+# Guarantee unique, completely mixed starting values for all 35 species
+# by pulling them all from a single combined pool
+all_target_starts = random.sample(range(20, 950), 35)
+k_starts = all_target_starts[:10]
+r_starts = all_target_starts[10:]
 
 # ==========================================
 # POPULATION MATH (35 Species)
@@ -46,10 +49,23 @@ for i in range(25):
     labels.append(name)
     ground_truth["classifications"][name] = "r-selected"
 
-    base_pop = float(r_starts[i])
-    pop = np.full_like(t, base_pop, dtype=float)
+    target_start = float(r_starts[i])
 
-    # 1 to 4 massive exponential reproduction events
+    # If the randomly assigned start value is high, model a "pre-crash" state at t=0
+    if target_start > 250:
+        base_pop = float(np.random.randint(10, 150))
+        pop = np.full_like(t, base_pop, dtype=float)
+
+        # Center a spike at t=0 so the actual starting point matches target_start, then crashes
+        spike_height = target_start - base_pop
+        width = np.random.uniform(2, 8)
+        pop += spike_height * np.exp(-((t - 0) ** 2) / width)
+    else:
+        # Standard low starting baseline
+        base_pop = target_start
+        pop = np.full_like(t, base_pop, dtype=float)
+
+    # 1 to 4 massive exponential reproduction events in the future
     num_spikes = np.random.randint(1, 5)
     for _ in range(num_spikes):
         spike_time = np.random.randint(10, 90)
@@ -106,7 +122,7 @@ ax.set_xlim(-35, 105)
 ax.set_ylim(0, 1100)
 ax.set_xlabel("Time (Generations)", fontsize=14, fontweight='bold', labelpad=10)
 ax.set_ylabel("Population Size", fontsize=14, fontweight='bold', labelpad=10)
-ax.set_title("Population Dynamics of 35 Canadian Arctic Species", fontsize=16, fontweight='bold', pad=20)
+ax.set_title("Population Dynamics of 35 Unidentified Species", fontsize=16, fontweight='bold', pad=20)
 
 ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
@@ -116,3 +132,7 @@ ax.grid(False)
 
 plt.tight_layout()
 plt.show()
+
+# Terminate script
+print("Visual generation complete. Exiting.")
+sys.exit(0)
