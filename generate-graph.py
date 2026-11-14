@@ -32,11 +32,33 @@ for i in range(10):
     start_pop = k_starts[i]
     end_pop = np.random.randint(100, 900)
     midpoint = np.random.randint(20, 80)
-    rate = np.random.uniform(0.1, 0.3)
+    rate = np.random.uniform(0.05, 0.2)
 
+    # 1. Base logistic curve
     pop = start_pop + (end_pop - start_pop) / (1 + np.exp(-rate * (t - midpoint)))
-    pop += np.random.randint(5, 25) * np.sin(t * np.random.uniform(0.05, 0.2))
 
+    # 2. Add severe crashes to roughly half the K-selected species
+    if random.random() > 0.5:
+        crash_time = np.random.uniform(20, 80)
+        # Calculate the population exactly at the crash time to drop it proportionally
+        crash_idx = int((crash_time / 110.0) * 3000)
+        if crash_idx < 3000:
+            current_level = pop[crash_idx]
+            crash_depth = np.random.uniform(0.4, 0.7) * current_level
+            crash_steepness = np.random.uniform(0.5, 2.0)
+
+            # Apply the crash
+            pop -= crash_depth / (1 + np.exp(-crash_steepness * (t - crash_time)))
+
+            # Apply a slow, agonizing recovery or stabilization to a new baseline
+            recovery_rate = np.random.uniform(0.02, 0.08)
+            pop += (crash_depth * np.random.uniform(0.3, 0.8)) / (1 + np.exp(-recovery_rate * (t - (crash_time + 15))))
+
+    # 3. Add complex, erratic wobble to break up the "nice slow curves"
+    pop += np.random.randint(10, 30) * np.sin(t * np.random.uniform(0.05, 0.3))  # Low freq wobble
+    pop += np.random.randint(2, 10) * np.cos(t * np.random.uniform(0.8, 2.0))  # High freq jitter
+
+    pop = np.clip(pop, 5, None)  # Prevent dropping below 0
     lines.append(pop)
 
 for i in range(25):
@@ -47,34 +69,47 @@ for i in range(25):
     target_start = float(r_starts[i])
 
     if target_start > 250:
-        # Changed to uniform float to prevent perfect integer baseline overlaps
+        # Delayed crash to baseline
         base_pop = np.random.uniform(10.0, 180.0)
-
         crash_midpoint = np.random.uniform(5, 25)
         crash_rate = np.random.uniform(0.2, 0.5)
 
         height = (target_start - base_pop) * (1 + np.exp(-crash_rate * crash_midpoint))
         pop = base_pop + height / (1 + np.exp(crash_rate * (t - crash_midpoint)))
+        spike_start = 30
     else:
-        base_pop = target_start
-        pop = np.full_like(t, base_pop, dtype=float)
-
         if random.random() > 0.5:
+            # NEW: The "Lag Phase" Trap (Fake K-selected)
+            # Slowly rise like a K-selected species for 40-60 years before going nuclear
+            fake_k_end = np.random.uniform(target_start + 50, target_start + 300)
+            fake_mid = np.random.uniform(20, 50)
+            fake_rate = np.random.uniform(0.05, 0.15)
+
+            pop = target_start + (fake_k_end - target_start) / (1 + np.exp(-fake_rate * (t - fake_mid)))
+            spike_start = np.random.uniform(55, 75)  # Wait a long time to boom/bust
+        else:
+            # Standard low starting baseline with an early boom
+            base_pop = target_start
+            pop = np.full_like(t, base_pop, dtype=float)
+
             early_spike = np.random.uniform(5, 15)
             early_height = np.random.randint(400, 900)
             early_width = np.random.uniform(2, 6)
             pop += early_height * np.exp(-((t - early_spike) ** 2) / early_width)
+            spike_start = 30
 
-    # Add a tiny unique organic drift to the baseline so horizontal lines never perfectly merge
-    pop += np.random.uniform(1, 4) * np.sin(t * np.random.uniform(0.01, 0.05))
+    # Organic drift so baselines aren't flat
+    pop += np.random.uniform(2, 8) * np.sin(t * np.random.uniform(0.01, 0.1))
 
+    # Add the exponential spikes AFTER their respective safe windows
     num_spikes = np.random.randint(2, 6)
     for _ in range(num_spikes):
-        spike_time = np.random.randint(30, 110)
+        spike_time = np.random.uniform(spike_start, 110)
         spike_height = np.random.randint(400, 900)
         width = np.random.uniform(2, 8)
         pop += spike_height * np.exp(-((t - spike_time) ** 2) / width)
 
+    pop = np.clip(pop, 5, None)
     lines.append(pop)
 
 combined = list(zip(labels, lines))
@@ -83,7 +118,7 @@ labels, lines = zip(*combined)
 
 # Find the absolute highest point across all species to dynamically set the Y-axis limit
 max_pop_value = max([np.max(pop) for pop in lines])
-y_limit = max(1100.0, max_pop_value * 1.05) # Add 5% breathing room at the top
+y_limit = max(1100.0, max_pop_value * 1.05)
 
 # ==========================================
 # EXPORT GROUND TRUTH JSON
@@ -105,7 +140,6 @@ for pop in lines:
 start_vals = [pop[0] for pop in lines]
 sorted_indices = np.argsort(start_vals)
 
-# Dynamically space text labels across the new responsive Y-axis
 text_y_positions = np.linspace(10, y_limit * 0.98, len(lines))
 
 for rank, idx in enumerate(sorted_indices):
