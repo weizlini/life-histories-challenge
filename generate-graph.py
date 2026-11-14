@@ -122,7 +122,7 @@ ax.set_xlim(-35, 105)
 ax.set_ylim(0, 1100)
 ax.set_xlabel("Time (Generations)", fontsize=14, fontweight='bold', labelpad=10)
 ax.set_ylabel("Population Size", fontsize=14, fontweight='bold', labelpad=10)
-ax.set_title("Population Dynamics of 35 Unidentified Species", fontsize=16, fontweight='bold', pad=20)
+ax.set_title("Population Dynamics of 35 Arctic Species", fontsize=16, fontweight='bold', pad=20)
 
 ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
