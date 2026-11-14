@@ -16,8 +16,10 @@ lines = []
 labels = []
 ground_truth = {
     "species_count": 35,
-    "k_selected_count": 10,
-    "r_selected_count": 25,
+    "k_selected_count_total": 10,
+    "r_selected_count_total": 25,
+    "k_selected_count_valid": 9,
+    "r_selected_count_valid": 24,
     "decoys_to_ignore": [],
     "classifications": {}
 }
