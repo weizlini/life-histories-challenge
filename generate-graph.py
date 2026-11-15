@@ -309,13 +309,15 @@ print("Saved clean two-panel visual to population_dynamics.png")
 # ==========================================
 # PLOTTING THE ANNOTATED GRAPH
 # ==========================================
+# Place red dots strictly on the 24 valid r-selected lines on the far-right flat baseline section (t in [96, 99])
+right_flat_indices = np.where((t >= 96.0) & (t <= 99.0))[0]
+
 for i, (pop_gaps, pop_full) in enumerate(lines):
     label = labels[i]
-    if ground_truth["classifications"][label] == "K-selected":
-        plot_mask = t <= 100
-        visible_indices = np.where(plot_mask)[0]
-        if len(visible_indices) > 0:
-            dot_idx = random.choice(visible_indices[500:-500])
+    if (ground_truth["classifications"][label] == "r-selected" and
+            label not in ground_truth["decoys_to_ignore"]):
+        if len(right_flat_indices) > 0:
+            dot_idx = random.choice(right_flat_indices)
             ax1.plot(t[dot_idx], pop_full[dot_idx], 'ro', markersize=6, zorder=300)
 
 plt.savefig("population_dynamics_annotated.png", dpi=300, bbox_inches='tight')
