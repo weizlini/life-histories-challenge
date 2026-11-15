@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import json
 import random
 import string
@@ -35,8 +36,8 @@ while len(unique_codes) < 35:
 unique_codes = sorted(list(unique_codes))
 random.shuffle(unique_codes)
 
-# 1. GUARANTEE UNIQUE, EVENLY SPACED Y-ORIGINS AT X=0 (Minimum ~74 units apart)
-all_target_starts = list(np.linspace(60, 2600, 35))
+# 1. TIGHTER SPACING (Middle ground: ~49 units apart at t=0, distinct for humans but dense in the middle)
+all_target_starts = list(np.linspace(50, 1750, 35))
 random.shuffle(all_target_starts)
 k_starts = all_target_starts[:10]
 r_starts = all_target_starts[10:]
@@ -59,21 +60,34 @@ def inject_missing_data(pop_array, time_array, is_decoy=False):
         num_gaps = np.random.randint(2, 5)
         for _ in range(num_gaps):
             gap_start = np.random.uniform(5, 95)
-            gap_len = np.random.uniform(0.5, 2.0)
+            gap_len = np.random.uniform(0.8, 2.2)
             gap_mask = (time_array >= gap_start) & (time_array <= gap_start + gap_len)
             pop_array[gap_mask] = np.nan
     return pop_array
 
 
 def add_shatter_jitter(pop_array, time_array):
-    """Applies high-frequency seasonal wobble that is strictly 0 at t=0 to preserve origin separation."""
-    # Ramp ensures jitter is 0 at t=0 and reaches full strength by t=4
+    """Applies continuous high-frequency seasonal wobble (strictly 0 at t=0)."""
     ramp = np.minimum(1.0, time_array / 4.0)
     envelope = (0.5 + 0.3 * np.sin(time_array * np.random.uniform(0.02, 0.08)) +
                 0.2 * np.cos(time_array * np.random.uniform(0.01, 0.05))) * ramp
-    wobble1 = np.random.uniform(12, 26) * np.sin(time_array * np.random.uniform(3.0, 5.5))
+    wobble1 = np.random.uniform(12, 24) * np.sin(time_array * np.random.uniform(3.0, 5.5))
     wobble2 = np.random.randint(2, 8) * np.sin(time_array * np.random.uniform(0.8, 2.0))
     pop_array += (wobble1 + wobble2) * envelope
+    return pop_array
+
+
+def add_sectional_wobble(pop_array, time_array):
+    """Adds localized bursts of wobble to otherwise smooth curves so they aren't uniformly straight."""
+    ramp = np.minimum(1.0, time_array / 4.0)
+    num_patches = np.random.randint(1, 3)
+    for _ in range(num_patches):
+        center = np.random.uniform(18, 88)
+        span = np.random.uniform(4.5, 9.0)
+        # Gaussian window restricts the wobble to a specific time section
+        window = np.exp(-((time_array - center) ** 2) / (2 * span ** 2)) * ramp
+        wobble = np.random.uniform(10, 22) * np.sin(time_array * np.random.uniform(2.5, 5.0))
+        pop_array += wobble * window
     return pop_array
 
 
@@ -81,9 +95,8 @@ def add_shatter_jitter(pop_array, time_array):
 # POPULATION MATH (35 Species)
 # ==========================================
 
-# --- 10 K-selected species: Smooth logistic trajectories & gentle carrying-capacity shifts ---
-# Stratified end populations so K-curves spread cleanly across the entire vertical space
-k_ends = list(np.linspace(250, 2500, 10))
+# --- 10 K-selected species: Tighter vertical domain (180 to 1750) ---
+k_ends = list(np.linspace(180, 1750, 10))
 random.shuffle(k_ends)
 
 for i in range(10):
@@ -106,17 +119,20 @@ for i in range(10):
     norm_logistic = (raw_logistic - raw_0) / (1.0 - raw_0)
     pop = start_pop + (end_pop - start_pop) * norm_logistic
 
-    # Gentle carrying-capacity adjustment (replaces vertical crashes so K-selected never mimic r-selected busts)
+    # Gentle carrying-capacity adjustment
     if random.random() > 0.5:
         shift_time = np.random.uniform(50, 80)
-        shift_amp = np.random.uniform(-220, 220)
+        shift_amp = np.random.uniform(-180, 180)
         shift_rate = np.random.uniform(0.06, 0.12)
         s_raw = 1.0 / (1.0 + np.exp(-shift_rate * (t - shift_time)))
         s_0 = 1.0 / (1.0 + np.exp(-shift_rate * (0.0 - shift_time)))
         pop += shift_amp * (s_raw - s_0)
 
+    # 50% get full shatter jitter; the "smooth" 50% get localized sectional wobble
     if random.random() > 0.5:
         pop = add_shatter_jitter(pop, t)
+    else:
+        pop = add_sectional_wobble(pop, t)
 
     pop = np.clip(pop, 10, None)
     pop[0] = start_pop  # Lock exact t=0 value
@@ -124,10 +140,8 @@ for i in range(10):
     pop_gaps = inject_missing_data(pop.copy(), t, is_decoy)
     lines.append((pop_gaps, pop_full))
 
-
-# --- 25 r-selected species: Stratified baselines (no 0-400 pileup) + unmistakable boom-and-bust spikes ---
-# Spread baselines across 80 to 1650 so curves never stack into an unreadable black band at the bottom
-r_baselines = list(np.linspace(80, 1650, 25))
+# --- 25 r-selected species: Compressed baselines (60 to 1050) for denser crossings ---
+r_baselines = list(np.linspace(60, 1050, 25))
 random.shuffle(r_baselines)
 
 for i in range(25):
@@ -142,7 +156,7 @@ for i in range(25):
     target_start = float(r_starts[i])
     base_pop = float(r_baselines[i])
 
-    # Smooth transition from exact target_start at t=0 to the species' stratified baseline
+    # Smooth transition from exact target_start at t=0 to the species' baseline
     trans_mid = np.random.uniform(8, 22)
     trans_rate = np.random.uniform(0.18, 0.35)
     raw_trans = 1.0 / (1.0 + np.exp(-trans_rate * (t - trans_mid)))
@@ -150,16 +164,18 @@ for i in range(25):
     norm_trans = (raw_trans - raw_trans_0) / (1.0 - raw_trans_0)
     pop = target_start + (base_pop - target_start) * norm_trans
 
+    # 50% get full shatter jitter; the other 50% get localized sectional wobble
     if random.random() > 0.5:
         pop = add_shatter_jitter(pop, t)
+    else:
+        pop = add_sectional_wobble(pop, t)
 
-    # Every r-selected species gets 2 to 4 unmistakable boom-and-bust spikes (>650 prominence)
-    # Staggered across time windows so spikes cross cleanly at sharp 'X' angles instead of overlapping vertically
+    # 2 to 4 unmistakable boom-and-bust spikes (>550 prominence)
     num_spikes = np.random.randint(2, 5)
     windows = np.linspace(14, 92, num_spikes + 1)
     for w_idx in range(num_spikes):
         spike_time = np.random.uniform(windows[w_idx] + 2, windows[w_idx + 1] - 2)
-        spike_height = np.random.uniform(700, 1350)
+        spike_height = np.random.uniform(600, 1100)
         width = np.random.uniform(2.5, 7.5)
 
         spike_curve = spike_height * np.exp(-((t - spike_time) ** 2) / width)
@@ -177,7 +193,7 @@ random.shuffle(combined)
 labels, lines = zip(*combined)
 
 max_pop_value = max([np.nanmax(pop_full) for pop_gaps, pop_full in lines])
-y_limit = max(2800.0, max_pop_value * 1.06)
+y_limit = max(1950.0, max_pop_value * 1.05)
 
 with open("ground_truth.json", "w") as f:
     json.dump(ground_truth, f, indent=4)
@@ -187,22 +203,33 @@ print("Saved ground truth to ground_truth.json")
 # PLOTTING THE TWO-PANEL GRAPH
 # ==========================================
 
-fig = plt.figure(figsize=(15, 17))
-gs = fig.add_gridspec(2, 1, height_ratios=[2.8, 1.5], hspace=0.22)
+fig = plt.figure(figsize=(15, 18))
+gs = fig.add_gridspec(2, 1, height_ratios=[2.8, 1.5], hspace=0.32)
 ax1 = fig.add_subplot(gs[0])
 ax2 = fig.add_subplot(gs[1], polar=True)
 
 start_vals = [pop_full[0] for pop_gaps, pop_full in lines]
 sorted_indices = np.argsort(start_vals)
 
-# --- Top Panel: Trajectories ---
+# --- Top Panel: Trajectories with Dotted Sampling Gaps ---
 for pop_gaps, pop_full in lines:
     plot_mask = t <= 100
     z = random.randint(10, 100)
-    ax1.plot(t[plot_mask], pop_full[plot_mask], color='black', linewidth=1.0, solid_joinstyle='round', zorder=z)
+
+    # Isolate ONLY the missing gap segments (plus 1 boundary point on each side to connect cleanly)
+    nan_mask = np.isnan(pop_gaps)
+    gap_draw_mask = np.convolve(nan_mask.astype(int), [1, 1, 1], mode='same') > 0
+    pop_missing = np.where(gap_draw_mask, pop_full, np.nan)
+
+    # Plot dotted line strictly inside the sampling gaps
+    ax1.plot(t[plot_mask], pop_missing[plot_mask], color='black', linewidth=1.1,
+             linestyle=':', zorder=z)
+    # Plot solid line where survey data exists
+    ax1.plot(t[plot_mask], pop_gaps[plot_mask], color='black', linewidth=1.0,
+             solid_joinstyle='round', zorder=z + 1)
 
 # Evenly spaced label positions on the left margin
-text_y_positions = np.linspace(30, y_limit * 0.96, len(lines))
+text_y_positions = np.linspace(25, y_limit * 0.96, len(lines))
 
 for rank, idx in enumerate(sorted_indices):
     actual_y = start_vals[idx]
@@ -215,10 +242,14 @@ for rank, idx in enumerate(sorted_indices):
     # Small origin dot at t=0 so human reviewers can see each distinct starting point clearly
     ax1.scatter([0], [actual_y], color='black', s=10, zorder=160)
 
-# Clear, unambiguous note that defines the exact cutoff without giving away the count
+# Legend for the dotted sampling gaps
+gap_legend_line = mlines.Line2D([], [], color='black', linewidth=1.2, linestyle=':', label='Sampling Gap (Inferred)')
+ax1.legend(handles=[gap_legend_line], loc='upper left', bbox_to_anchor=(0.18, 0.99), fontsize=10, frameon=False)
+
+# Note defines the life-history rule qualitatively without giving away the numeric value
 ax1.text(0.99, 0.97,
          "* Note: Species with >20% survey gaps are not valid.\n"
-         "  r-selected species exhibit boom-and-bust spikes (>500 pop. surge); K-selected follow logistic curves.",
+         "  r-selected species exhibit boom-and-bust spikes; K-selected follow logistic curves.",
          transform=ax1.transAxes, ha='right', va='top', fontsize=10, color='black', fontstyle='italic',
          bbox=dict(facecolor='white', edgecolor='black', pad=5), zorder=250)
 
@@ -268,7 +299,8 @@ for label_text, angle in zip(labels, angles):
     ax2.text(angle, 113, label_text, rotation=rotation, ha=ha, va='center',
              rotation_mode='anchor', fontsize=7.5, fontweight='bold', clip_on=False)
 
-ax2.set_title("Survey of Data Captured", fontsize=12, fontweight='bold', pad=45)
+# Increased pad from 45 to 85 so the title clears the top vertical spoke labels cleanly
+ax2.set_title("Survey of Data Captured", fontsize=12, fontweight='bold', pad=85)
 
 plt.tight_layout()
 plt.savefig("population_dynamics.png", dpi=300, bbox_inches='tight')
