@@ -36,8 +36,8 @@ while len(unique_codes) < 35:
 unique_codes = sorted(list(unique_codes))
 random.shuffle(unique_codes)
 
-# 1. TIGHTER SPACING (Middle ground: ~49 units apart at t=0, distinct for humans but dense in the middle)
-all_target_starts = list(np.linspace(50, 1750, 35))
+# 1. RAZOR-EDGE SPACING (~41.6 units apart at t=0: right at the limit of human traceability without overlapping)
+all_target_starts = list(np.linspace(45, 1460, 35))
 random.shuffle(all_target_starts)
 k_starts = all_target_starts[:10]
 r_starts = all_target_starts[10:]
@@ -71,8 +71,8 @@ def add_shatter_jitter(pop_array, time_array):
     ramp = np.minimum(1.0, time_array / 4.0)
     envelope = (0.5 + 0.3 * np.sin(time_array * np.random.uniform(0.02, 0.08)) +
                 0.2 * np.cos(time_array * np.random.uniform(0.01, 0.05))) * ramp
-    wobble1 = np.random.uniform(12, 24) * np.sin(time_array * np.random.uniform(3.0, 5.5))
-    wobble2 = np.random.randint(2, 8) * np.sin(time_array * np.random.uniform(0.8, 2.0))
+    wobble1 = np.random.uniform(11, 22) * np.sin(time_array * np.random.uniform(3.0, 5.5))
+    wobble2 = np.random.randint(2, 7) * np.sin(time_array * np.random.uniform(0.8, 2.0))
     pop_array += (wobble1 + wobble2) * envelope
     return pop_array
 
@@ -86,7 +86,7 @@ def add_sectional_wobble(pop_array, time_array):
         span = np.random.uniform(4.5, 9.0)
         # Gaussian window restricts the wobble to a specific time section
         window = np.exp(-((time_array - center) ** 2) / (2 * span ** 2)) * ramp
-        wobble = np.random.uniform(10, 22) * np.sin(time_array * np.random.uniform(2.5, 5.0))
+        wobble = np.random.uniform(9, 20) * np.sin(time_array * np.random.uniform(2.5, 5.0))
         pop_array += wobble * window
     return pop_array
 
@@ -95,8 +95,8 @@ def add_sectional_wobble(pop_array, time_array):
 # POPULATION MATH (35 Species)
 # ==========================================
 
-# --- 10 K-selected species: Tighter vertical domain (180 to 1750) ---
-k_ends = list(np.linspace(180, 1750, 10))
+# --- 10 K-selected species: Tighter vertical domain (150 to 1450) ---
+k_ends = list(np.linspace(150, 1450, 10))
 random.shuffle(k_ends)
 
 for i in range(10):
@@ -122,7 +122,7 @@ for i in range(10):
     # Gentle carrying-capacity adjustment
     if random.random() > 0.5:
         shift_time = np.random.uniform(50, 80)
-        shift_amp = np.random.uniform(-180, 180)
+        shift_amp = np.random.uniform(-150, 150)
         shift_rate = np.random.uniform(0.06, 0.12)
         s_raw = 1.0 / (1.0 + np.exp(-shift_rate * (t - shift_time)))
         s_0 = 1.0 / (1.0 + np.exp(-shift_rate * (0.0 - shift_time)))
@@ -140,8 +140,8 @@ for i in range(10):
     pop_gaps = inject_missing_data(pop.copy(), t, is_decoy)
     lines.append((pop_gaps, pop_full))
 
-# --- 25 r-selected species: Compressed baselines (60 to 1050) for denser crossings ---
-r_baselines = list(np.linspace(60, 1050, 25))
+# --- 25 r-selected species: Tighter baselines (55 to 860, ~33.5 units apart) for maximum tangle ---
+r_baselines = list(np.linspace(55, 860, 25))
 random.shuffle(r_baselines)
 
 for i in range(25):
@@ -170,12 +170,12 @@ for i in range(25):
     else:
         pop = add_sectional_wobble(pop, t)
 
-    # 2 to 4 unmistakable boom-and-bust spikes (>550 prominence)
+    # 2 to 4 unmistakable boom-and-bust spikes
     num_spikes = np.random.randint(2, 5)
     windows = np.linspace(14, 92, num_spikes + 1)
     for w_idx in range(num_spikes):
         spike_time = np.random.uniform(windows[w_idx] + 2, windows[w_idx + 1] - 2)
-        spike_height = np.random.uniform(600, 1100)
+        spike_height = np.random.uniform(520, 950)
         width = np.random.uniform(2.5, 7.5)
 
         spike_curve = spike_height * np.exp(-((t - spike_time) ** 2) / width)
@@ -193,7 +193,7 @@ random.shuffle(combined)
 labels, lines = zip(*combined)
 
 max_pop_value = max([np.nanmax(pop_full) for pop_gaps, pop_full in lines])
-y_limit = max(1950.0, max_pop_value * 1.05)
+y_limit = max(1650.0, max_pop_value * 1.05)
 
 with open("ground_truth.json", "w") as f:
     json.dump(ground_truth, f, indent=4)
@@ -249,7 +249,7 @@ ax1.legend(handles=[gap_legend_line], loc='upper left', bbox_to_anchor=(0.18, 0.
 # Note defines the life-history rule qualitatively without giving away the numeric value
 ax1.text(0.99, 0.97,
          "* Note: Species with >20% survey gaps are not valid.\n"
-         "  r-selected species exhibit boom-and-bust spikes; K-selected follow logistic curves.",
+         "K-selected follow logistic curves.",
          transform=ax1.transAxes, ha='right', va='top', fontsize=10, color='black', fontstyle='italic',
          bbox=dict(facecolor='white', edgecolor='black', pad=5), zorder=250)
 
@@ -280,8 +280,8 @@ ax2.plot(angles_closed, scores_closed, color='black', linewidth=1.0, zorder=3)
 ax2.scatter(angles, completeness_scores, color='black', s=20, zorder=4)
 
 ax2.set_ylim(0, 105)
-ax2.set_yticks([25, 50, 75, 100])
-ax2.set_yticklabels(['25', '50', '75', '100'], color='gray', fontsize=8)
+ax2.set_yticks([50, 100])
+ax2.set_yticklabels([ '50',  '100'], color='gray', fontsize=8)
 ax2.set_xticks(angles)
 ax2.set_xticklabels([])  # Hide default horizontal labels to prevent pole collisions
 
