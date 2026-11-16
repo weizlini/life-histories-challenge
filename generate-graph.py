@@ -309,15 +309,20 @@ print("Saved clean two-panel visual to population_dynamics.png")
 # ==========================================
 # PLOTTING THE ANNOTATED GRAPH
 # ==========================================
-# Place red dots on the K-selected lines on the far-right flat section (t in [96, 99])
-right_flat_indices = np.where((t >= 96.0) & (t <= 99.0))[0]
+# Sort K-selected curves by their height on the right side and alternate both x-position and dot width/size so adjacent curves never overlap
+ref_idx = np.argmin(np.abs(t - 96.5))
+k_indices = [i for i, lbl in enumerate(labels) if ground_truth["classifications"][lbl] == "K-selected"]
+k_indices_sorted = sorted(k_indices, key=lambda idx: lines[idx][1][ref_idx])
 
-for i, (pop_gaps, pop_full) in enumerate(lines):
-    label = labels[i]
-    if ground_truth["classifications"][label] == "K-selected":
-        if len(right_flat_indices) > 0:
-            dot_idx = random.choice(right_flat_indices)
-            ax1.plot(t[dot_idx], pop_full[dot_idx], 'ro', markersize=6, zorder=300)
+alt_times = [94.0, 97.5]
+alt_sizes = [5.5, 7.0]
+
+for rank, idx in enumerate(k_indices_sorted):
+    pop_full = lines[idx][1]
+    target_t = alt_times[rank % 2]
+    dot_size = alt_sizes[rank % 2]
+    dot_idx = int(np.argmin(np.abs(t - target_t)))
+    ax1.plot(t[dot_idx], pop_full[dot_idx], 'ro', markersize=dot_size, zorder=300)
 
 plt.savefig("population_dynamics_annotated.png", dpi=300, bbox_inches='tight')
 print("Saved annotated two-panel visual to population_dynamics_annotated.png")
